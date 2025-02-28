@@ -18,34 +18,85 @@ app.use(express.json());
 app.get('/admin/take-order', (req, res) => {
   res.send(`
     <!DOCTYPE html>
-    <html>
+    <html lang="en">
     <head>
-      <title>Take Order</title>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Take Order - Admin</title>
+      <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
       <style>
-        body { font-family: Arial, sans-serif; padding: 20px; }
-        label { display: block; margin-bottom: 5px; }
-        input, select { margin-bottom: 10px; width: 200px; }
-        button { background: green; color: white; padding: 5px 10px; border: none; }
+        body { font-family: 'Arial', sans-serif; background: #f8f9fa; padding: 20px; }
+        h1 { color: #28a745; font-weight: bold; }
+        .section { background: #fff; padding: 15px; margin-bottom: 20px; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        label { font-weight: 500; margin-bottom: 5px; }
+        input, select { width: 100%; max-width: 300px; margin-bottom: 15px; padding: 8px; border: 1px solid #ced4da; border-radius: 4px; }
+        button { background: #28a745; border: none; padding: 10px 20px; font-size: 16px; }
+        button:hover { background: #218838; }
       </style>
     </head>
     <body>
-      <h1>Take Order (Phone)</h1>
-      <form action="/admin/take-order" method="POST">
-        <label>Employee Name:</label>
-        <input type="text" name="employee" required>
-        <label>Order Type:</label>
-        <select name="orderType">
-          <option value="phone">Phone</option>
-          <option value="in-person">In-Person</option>
-          <option value="other">Other</option>
-        </select>
-        <label>Delivery Type:</label>
-        <select name="deliveryType">
-          <option value="delivery">Delivery</option>
-          <option value="pickup">Pickup</option>
-        </select>
-        <button type="submit">Save Order</button>
-      </form>
+      <div class="container">
+        <h1>Take Order (Phone)</h1>
+        <form action="/admin/take-order" method="POST">
+          <div class="section">
+            <h2>Order Info</h2>
+            <div class="mb-3">
+              <label>Employee Name:</label>
+              <input type="text" name="employee" class="form-control" required>
+            </div>
+            <div class="mb-3">
+              <label>Order Type:</label>
+              <select name="orderType" class="form-select">
+                <option value="phone">Phone</option>
+                <option value="in-person">In-Person</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label>Delivery Type:</label>
+              <select name="deliveryType" class="form-select">
+                <option value="delivery">Delivery</option>
+                <option value="pickup">Pickup</option>
+              </select>
+            </div>
+          </div>
+          <div class="section">
+            <h2>Customer Info</h2>
+            <div class="mb-3">
+              <label>Customer Name:</label>
+              <input type="text" name="customerName" class="form-control" required>
+            </div>
+            <div class="mb-3">
+              <label>Customer Phone:</label>
+              <input type="tel" name="customerPhone" class="form-control" required>
+            </div>
+            <div class="mb-3">
+              <label>Customer Email:</label>
+              <input type="email" name="customerEmail" class="form-control">
+            </div>
+            <div class="mb-3">
+              <label>Customer Address:</label>
+              <input type="text" name="customerAddress" class="form-control">
+            </div>
+          </div>
+          <div class="section">
+            <h2>Recipient Info</h2>
+            <div class="mb-3">
+              <label>Recipient Name:</label>
+              <input type="text" name="recipientName" class="form-control" required>
+            </div>
+            <div class="mb-3">
+              <label>Recipient Phone:</label>
+              <input type="tel" name="recipientPhone" class="form-control">
+            </div>
+            <div class="mb-3">
+              <label>Recipient Address:</label>
+              <input type="text" name="recipientAddress" class="form-control" required>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-success">Save Order</button>
+        </form>
+      </div>
     </body>
     </html>
   `);
@@ -156,10 +207,17 @@ app.get('/api/delivery-distance', async (req, res) => {
 });
 
 app.post('/admin/take-order', async (req, res) => {
-  const { employee, orderType, deliveryType } = req.body;
-  console.log('Order received:', { employee, orderType, deliveryType }); // Temporary log
-  res.redirect('/admin/take-order'); // Redirect back for now
-  // We’ll add database save in Step 2 tomorrow
+  const {
+    employee, orderType, deliveryType,
+    customerName, customerPhone, customerEmail, customerAddress,
+    recipientName, recipientPhone, recipientAddress
+  } = req.body;
+  console.log('Order received:', {
+    employee, orderType, deliveryType,
+    customer: { name: customerName, phone: customerPhone, email: customerEmail, address: customerAddress },
+    recipient: { name: recipientName, phone: recipientPhone, address: recipientAddress }
+  });
+  res.redirect('/admin/take-order');
 });
 
 app.post('/api/create-payment-intent', async (req, res) => {
