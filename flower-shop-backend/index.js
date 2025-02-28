@@ -3,7 +3,7 @@ const { Pool } = require('pg');
 const cors = require('cors');
 const fetch = require('node-fetch');
 const stripe = require('stripe')('sk_test_51OajyeBxoCAP8QMVtlVatVWDPFcg1cKAPxWqRJxDKwE4fiH3BjBdf7jKW5pZH11J5qvHUcCTvFOnaT10TKLrmsWF004tdWALXT');
-
+const adminRouter = require('./src/routes/admin');
 const app = express();
 const port = 3002;
 
@@ -13,7 +13,10 @@ app.use(cors({
   methods: ['GET', 'POST'], // Allow these methods
   allowedHeaders: ['Content-Type'], // Allow this header
 }));
+
+app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
+app.use('/admin', adminRouter);
 
 app.get('/admin/take-order', (req, res) => {
   res.send(`
@@ -25,13 +28,17 @@ app.get('/admin/take-order', (req, res) => {
       <title>Take Order - Admin</title>
       <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
       <style>
-        body { font-family: 'Arial', sans-serif; background: #f8f9fa; padding: 20px; }
-        h1 { color: #28a745; font-weight: bold; }
-        .section { background: #fff; padding: 15px; margin-bottom: 20px; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        label { font-weight: 500; margin-bottom: 5px; }
-        input, select { width: 100%; max-width: 300px; margin-bottom: 15px; padding: 8px; border: 1px solid #ced4da; border-radius: 4px; }
-        button { background: #28a745; border: none; padding: 10px 20px; font-size: 16px; }
-        button:hover { background: #218838; }
+        body { font-family: 'Open Sans', sans-serif; background: #FBEFEA; padding: 30px 0; }
+        .container { max-width: 800px; background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        h1 { color: #EDAFB8; font-weight: 700; text-align: center; margin-bottom: 20px; }
+        h2 { font-size: 1.25rem; color: #333; margin-bottom: 15px; }
+        .section { padding: 15px; border-bottom: 1px solid #edeae4; }
+        .section:last-child { border-bottom: none; }
+        label { font-weight: 500; color: #555; margin-bottom: 5px; }
+        input, select { width: 100%; max-width: 400px; padding: 10px; border: 1px solid #DEDBD2; border-radius: 5px; background: #fff; }
+        .form-control:focus, .form-select:focus { border-color: #EDAFB8; box-shadow: 0 0 5px rgba(237, 175, 184, 0.5); }
+        button { background: #EDAFB8; border: none; padding: 10px 25px; font-size: 16px; border-radius: 5px; color: #fff; }
+        button:hover { background: #E598A2; }
       </style>
     </head>
     <body>
@@ -94,7 +101,7 @@ app.get('/admin/take-order', (req, res) => {
               <input type="text" name="recipientAddress" class="form-control" required>
             </div>
           </div>
-          <button type="submit" class="btn btn-success">Save Order</button>
+          <button type="submit" class="btn">Save Order</button>
         </form>
       </div>
     </body>
