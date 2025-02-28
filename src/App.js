@@ -1,76 +1,36 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Route, Routes, Link } from 'react-router-dom';
+import { loadStripe } from '@stripe/stripe-js';
+import { Elements } from '@stripe/react-stripe-js';
+import ProductPage from './ProductPage';
+import CategoryPage from './CategoryPage';
+import CartPage from './CartPage';
+import CheckoutPage from './CheckoutPage';
+import 'bootstrap/dist/css/bootstrap.min.css';
 
-function ProductPage({ products }) {
-  const [distance, setDistance] = useState(null);
-  const [deliveryCost, setDeliveryCost] = useState(null);
-  const [fetchError, setFetchError] = useState(null);
-  const productId = window.location.pathname.split('/').pop();
-  const product = products.find(p => p.id === parseInt(productId)) || {};
-
-  useEffect(() => {
-    if (!product.id) return;
-
-    const destination = '123 Test St, Prince George, BC'; // Valid test address
-
-    console.log('Fetching delivery distance for:', destination);
-    fetch(`http://localhost:3002/api/delivery-distance?destination=${encodeURIComponent(destination)}`)
-      .then(response => {
-        console.log('Response received:', response);
-        if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-        return response.json();
-      })
-      .then(data => {
-        console.log('Delivery data:', data);
-        if (data.error) {
-          setFetchError(data.error + (data.details ? `: ${data.details}` : ''));
-        } else {
-          setDistance(data.distance);
-          setDeliveryCost(data.cost);
-          setFetchError(null);
-        }
-      })
-      .catch(error => {
-        console.error('Error fetching distance:', error);
-        setFetchError(error.message);
-      });
-  }, [product.id]);
-
-  return (
-    <div className="container py-5">
-      <h2>{product.name}</h2>
-      <img src={product.image} alt={product.name} className="img-fluid mb-3" style={{ maxWidth: '300px' }} />
-      <p>Price: ${product.price}</p>
-      {fetchError ? (
-        <p>Error: {fetchError}</p>
-      ) : distance ? (
-        <p>Delivery Distance: {distance.toFixed(2)} km</p>
-      ) : (
-        <p>Calculating distance...</p>
-      )}
-      {fetchError ? null : deliveryCost ? (
-        <p>Estimated Delivery Cost: ${deliveryCost.toFixed(2)}</p>
-      ) : (
-        <p>Calculating cost...</p>
-      )}
-      <Link to="/" className="btn btn-primary">Back to Home</Link>
-    </div>
-  );
-}
+const stripePromise = loadStripe('YOUR_PK_TEST_KEY_HERE'); // Replace with your pk_test_...
 
 function App() {
   const [products, setProducts] = useState([]);
   const [error, setError] = useState(null);
+  const [cart, setCart] = useState([]);
+  const [guestId] = useState(() => {
+    let id = localStorage.getItem('guestId');
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem('guestId', id);
+    }
+    return id;
+  });
+  const [isDelivery, setIsDelivery] = useState(null); // null until first item
 
   useEffect(() => {
     console.log('Fetching products...');
     const fetchProducts = async () => {
       try {
         const response = await fetch('http://localhost:3002/api/products');
-        console.log('Response received:', response);
         if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
         const data = await response.json();
-        console.log('Products data:', data);
         setProducts(data);
       } catch (error) {
         console.error('Error fetching products:', error);
@@ -80,11 +40,148 @@ function App() {
     fetchProducts();
   }, []);
 
+  useEffect(() => {
+    const fetchCart = async () => {
+      try {
+        const response = await fetch(`http://localhost:3002/api/cart?guest_id=${guestId}`);
+        if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+        const data = await response.json();
+        console.log('Fetched cart:', data);
+        setCart(data);
+        if (data.length > 0 && isDelivery === null) {
+          setIsDelivery(data[0].isDelivery); // Set session delivery type
+        }
+      } catch (error) {
+        console.error('Error fetching cart:', error);
+      }
+    };
+    fetchCart();
+  }, [guestId]);
+
+  const addToCart = async (item) => {
+    if (cart.length > 0 && item.isDelivery !== isDelivery) {
+      alert(`You can only add ${isDelivery ? 'delivery' : 'pickup'} items to this cart. Please clear your cart to switch delivery type.`);
+      return;
+    }
+    try {
+      const response = await fetch('http://localhost:3002/api/cart', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ guest_id: guestId, item })
+      });
+      if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+      const updatedCart = await fetch(`http://localhost:3002/api/cart?guest_id=${guestId}`);
+      const updatedData = await updatedCart.json();
+      setCart(updatedData);
+      if (isDelivery === null) {
+        setIsDelivery(item.isDelivery); // Lock session type
+      }
+    } catch (error) {
+      console.error('Error adding to cart:', error);
+    }
+  };
+
+  const removeFromCart = async (index) => {
+    const newCart = cart.filter((_, i) => i !== index);
+    try {
+      const response = await fetch('http://localhost:3002/api/cart', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ guest_id: guestId, item: newCart })
+      });
+      if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+      const updatedCart = await fetch(`http://localhost:3002/api/cart?guest_id=${guestId}`);
+      const updatedData = await updatedCart.json();
+      setCart(updatedData);
+    } catch (error) {
+      console.error('Error removing from cart:', error);
+    }
+  };
+
+  const updateCartQuantity = async (index, newQuantity) => {
+    const newCart = [...cart];
+    newCart[index].quantity = newQuantity;
+    try {
+      const response = await fetch('http://localhost:3002/api/cart', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ guest_id: guestId, item: newCart })
+      });
+      if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+      const updatedCart = await fetch(`http://localhost:3002/api/cart?guest_id=${guestId}`);
+      const updatedData = await updatedCart.json();
+      setCart(updatedData);
+    } catch (error) {
+      console.error('Error updating cart quantity:', error);
+    }
+  };
+
+  const removeUpsell = async (cartIndex, upsellIndex) => {
+    const newCart = [...cart];
+    newCart[cartIndex].upsells.splice(upsellIndex, 1);
+    try {
+      const response = await fetch('http://localhost:3002/api/cart', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ guest_id: guestId, item: newCart })
+      });
+      if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+      const updatedCart = await fetch(`http://localhost:3002/api/cart?guest_id=${guestId}`);
+      const updatedData = await updatedCart.json();
+      setCart(updatedData);
+    } catch (error) {
+      console.error('Error removing upsell:', error);
+    }
+  };
+
+  const updateUpsellQuantity = async (cartIndex, upsellIndex, newQuantity) => {
+    const newCart = [...cart];
+    newCart[cartIndex].upsells[upsellIndex].quantity = newQuantity;
+    try {
+      const response = await fetch('http://localhost:3002/api/cart', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ guest_id: guestId, item: newCart })
+      });
+      if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+      const updatedCart = await fetch(`http://localhost:3002/api/cart?guest_id=${guestId}`);
+      const updatedData = await updatedCart.json();
+      setCart(updatedData);
+    } catch (error) {
+      console.error('Error updating upsell quantity:', error);
+    }
+  };
+
+  const clearCart = async () => {
+    try {
+      const response = await fetch('http://localhost:3002/api/cart', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ guest_id: guestId, item: [] })
+      });
+      if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+      const updatedCart = await fetch(`http://localhost:3002/api/cart?guest_id=${guestId}`);
+      const updatedData = await updatedCart.json();
+      setCart(updatedData);
+      setIsDelivery(null); // Reset delivery type
+    } catch (error) {
+      console.error('Error clearing cart:', error);
+    }
+  };
+
+  const buttonStyles = `
+    .custom-outline-btn:hover {
+      background-color: #edafb8 !important;
+      color: #fff !important;
+      border-color: #edafb8 !important;
+    }
+  `;
+
   return (
     <Router>
-      <div>
-        {/* Custom Navbar */}
-        <nav className="navbar navbar-expand-lg navbar-light bg-white">
+      <div style={{ backgroundColor: '#f8f9fa', minHeight: '100vh', fontFamily: 'Avenir, sans-serif', fontSize: '15px' }}>
+        <style>{buttonStyles}</style>
+        <nav className="navbar navbar-expand-lg navbar-light bg-white" style={{ backgroundColor: '#fff !important' }}>
           <div className="container-fluid">
             <div className="d-block d-md-none">
               <button
@@ -113,6 +210,9 @@ function App() {
                 </div>
                 <div className="offcanvas-body">
                   <ul className="nav flex-column">
+                    <li className="nav-item">
+                      <a className="nav-link" href="/">Home</a>
+                    </li>
                     <li className="nav-item dropdown">
                       <button
                         className="nav-link dropdown-toggle"
@@ -171,7 +271,10 @@ function App() {
                   <img src="/images/logo.png" alt="In Your Vase Logo" width="350" className="logo-img" />
                 </a>
                 <div className="navbar-collapse justify-content-center" id="navbarNavDesktop">
-                  <ul className="navbar-nav">
+                  <ul className="navbar-nav flex-row">
+                    <li className="nav-item">
+                      <a className="nav-link" href="/">Home</a>
+                    </li>
                     <li className="nav-item dropdown">
                       <button
                         className="nav-link dropdown-toggle"
@@ -203,68 +306,81 @@ function App() {
                   <a href="/account" className="me-2">
                     <img src="/images/acc.png" alt="Account" height="30" />
                   </a>
-                  <a href="/cart">
+                  <Link to="/cart">
                     <img src="/images/cart.jpg" alt="Cart" height="30" />
-                  </a>
+                    {cart.length > 0 && <span className="badge bg-danger">{cart.length}</span>}
+                  </Link>
                 </div>
               </div>
             </div>
             <div className="d-flex align-items-center d-md-none">
-              <a href="/account">
-                <img src="/images/acc.png" alt="Account" height="30" />
-              </a>
+              <Link to="/cart">
+                <img src="/images/cart.jpg" alt="Cart" height="30" />
+                {cart.length > 0 && <span className="badge bg-danger">{cart.length}</span>}
+              </Link>
             </div>
           </div>
         </nav>
 
-        {/* Routes */}
-        <Routes>
-          <Route
-            path="/"
-            element={
-              <section className="container py-5">
-                <div className="row">
-                  <div className="col-md-6">
-                    <h1>Fresh Blooms for Every Moment</h1>
-                    <p>Handcrafted bouquets, arrangements, and plants delivered to your door.</p>
-                    <a href="/shop/all" className="btn btn-primary">Explore Now</a>
+        <Elements stripe={stripePromise}>
+          <Routes>
+            <Route
+              path="/"
+              element={
+                <section className="container py-5">
+                  <div className="row">
+                    <div className="col-md-6">
+                      <h1 style={{ fontSize: '1.5rem' }}>Fresh Blooms for Every Moment</h1>
+                      <p>Handcrafted bouquets, arrangements, and plants delivered to your door.</p>
+                      <a href="/shop/all" className="btn btn-primary" style={{ backgroundColor: '#edafb8', borderColor: '#edafb8' }}>Explore Now</a>
+                    </div>
+                    <div className="col-md-6">
+                      <img src="/images/hero_1.jpg" alt="Featured Arrangement" className="img-fluid" />
+                    </div>
                   </div>
-                  <div className="col-md-6">
-                    <img src="/images/hero_1.jpg" alt="Featured Arrangement" className="img-fluid" />
-                  </div>
-                </div>
-                <h2 className="text-center mb-4 mt-5">Featured Favorites</h2>
-                <div className="row">
-                  {products.length > 0 ? (
-                    products.map(product => (
-                      <div className="col-md-4 mb-4" key={product.id}>
-                        <div className="card">
-                          <img src={product.image} alt={product.name} className="card-img-top" />
-                          <div className="card-body">
-                            <h5 className="card-title">{product.name}</h5>
-                            <p className="card-text">${product.price}</p>
-                            <Link to={`/product/${product.id}`} className="btn btn-outline-primary">View Details</Link>
+                  <h2 className="text-center mb-4 mt-5">Featured Favorites</h2>
+                  <div className="row">
+                    {products.length > 0 ? (
+                      products.map(product => (
+                        <div className="col-md-4 mb-4" key={product.id}>
+                          <div className="card">
+                            <img src={product.image} alt={product.name} className="card-img-top" />
+                            <div className="card-body">
+                              <h5 className="card-title" style={{ fontSize: '1.5rem' }}>{product.name}</h5>
+                              <p className="card-text" style={{ fontSize: '1.5rem' }}>${product.price}</p>
+                              <Link
+                                to={`/product/${product.id}`}
+                                className="btn btn-outline-primary custom-outline-btn"
+                                style={{ borderColor: '#edafb8', color: '#edafb8' }}
+                              >
+                                View Details
+                              </Link>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-center">{error ? `Error: ${error}` : 'Loading products...'}</p>
-                  )}
-                </div>
-              </section>
-            }
-          />
-          <Route path="/product/:id" element={<ProductPage products={products} />} />
-        </Routes>
+                      ))
+                    ) : error ? (
+                      <p className="text-center text-danger">Error: {error}</p>
+                    ) : (
+                      <p className="text-center">Loading products...</p>
+                    )}
+                  </div>
+                </section>
+              }
+            />
+            <Route path="/product/:id" element={<ProductPage products={products} addToCart={addToCart} />} />
+            <Route path="/shop/:category" element={<CategoryPage products={products} />} />
+            <Route path="/cart" element={<CartPage cart={cart} removeFromCart={removeFromCart} clearCart={clearCart} updateCartQuantity={updateCartQuantity} removeUpsell={removeUpsell} updateUpsellQuantity={updateUpsellQuantity} />} />
+            <Route path="/checkout" element={<CheckoutPage cart={cart} clearCart={clearCart} />} />
+          </Routes>
+        </Elements>
 
-        {/* Footer */}
         <footer className="bg-dark text-white py-4">
           <div className="container">
             <div className="row">
               <div className="col-md-4 text-center text-md-left">
                 <a href="/" className="mb-3 d-inline-block">
-                  <img src="/images/logo.png" alt="In Your Vase Logo" width="150" />
+                  <img src="/images/logo-inv.png" alt="In Your Vase Logo" width="200" />
                 </a>
                 <p>© 2025 In Your Vase. All rights reserved.</p>
               </div>
@@ -283,7 +399,8 @@ function App() {
             </div>
             <div className="row mt-3">
               <div className="col text-center">
-                <img src="/images/cclogos.png" alt="Accepted Payment Methods" className="img-fluid" style={{ maxWidth: '200px' }} />
+                <p>Accepted Payment methods</p>
+                <img src="/images/cclogos.png" alt="Accepted Payment Methods" className="img-fluid" style={{ maxWidth: '300px' }} />
               </div>
             </div>
           </div>
